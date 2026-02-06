@@ -6,17 +6,44 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
+  // ── 테스트 로그인 쿠키 체크 ──
+  const testUser = request.cookies.get('test-user')?.value;
+  if (testUser) {
+    // 테스트 유저가 있으면 auth 통과
+    const authPaths = ['/login', '/signup'];
+    const isAuthRoute = authPaths.some((path) =>
+      request.nextUrl.pathname.startsWith(path)
+    );
+    if (isAuthRoute) {
+      const parsed = JSON.parse(testUser);
+      const url = request.nextUrl.clone();
+      url.pathname = parsed.role === 'student' ? '/learn' : '/dashboard';
+      return NextResponse.redirect(url);
+    }
+    return supabaseResponse;
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   // Skip auth check if Supabase is not configured
-  if (!supabaseUrl || !supabaseAnonKey || !supabaseUrl.startsWith('http')) {
+  if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder')) {
+    // Protected routes → redirect to login
+    const protectedPaths = ['/dashboard', '/learn', '/progress', '/admin'];
+    const isProtectedRoute = protectedPaths.some((path) =>
+      request.nextUrl.pathname.startsWith(path)
+    );
+    if (isProtectedRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
     return supabaseResponse;
   }
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -61,7 +88,6 @@ export async function updateSession(request: NextRequest) {
 
   if (isAuthRoute && user) {
     const url = request.nextUrl.clone();
-    // Redirect based on role - default to learn for students
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);
   }
